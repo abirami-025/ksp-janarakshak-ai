@@ -1,0 +1,9 @@
+{
+  "name": "crime_query",
+  "version": "1.0.0",
+  "description": "Catalyst Serverless Function for Bilingual Crime Query Search",
+  "main": "index.js",
+  "dependencies": {
+    "zcatalyst-sdk-node": "latest"
+  }
+}

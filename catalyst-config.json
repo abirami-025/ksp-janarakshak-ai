@@ -1,0 +1,19 @@
+{
+  "project_info": {
+    "name": "KSPJanarakshakAI",
+    "id": "ksp-janarakshak-ai"
+  },
+  "client": {
+    "source": "client",
+    "device_types": [
+      "web"
+    ]
+  },
+  "functions": [
+    {
+      "name": "crime_query",
+      "type": "basicio",
+      "source": "functions/crime_query"
+    }
+  ]
+}
