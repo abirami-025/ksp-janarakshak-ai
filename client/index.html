@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KSP Janarakshak AI — Intelligent Crime Analytics Platform</title>
   <meta name="description" content="Karnataka State Police — Intelligent Conversational AI and Crime Analytics Command Center">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
   <link rel="stylesheet" href="style.css">
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -19,7 +20,7 @@
   <!-- jsPDF Client-Side Export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- Zoho Catalyst Web SDK -->
-  <script src="https://static.zoho-static.com/catalyst/sdk/js/v1.0.0/catalystWebSDK.js"></script>
+  <script src="https://cdn.zohostatic.com/catalyst/sdk/js/2.0.0/catalystWebSDK.js"></script>
 </head>
 <body>
 
@@ -66,25 +67,26 @@
       
       <div class="topbar-stats">
         <div class="stat-pill">
-          <span class="val" id="stat-firs">0</span>
+          <span class="val skeleton" id="stat-firs">0000</span>
           <span class="lbl">Total FIRs</span>
         </div>
         <div class="stat-pill">
-          <span class="val" id="stat-active">0</span>
+          <span class="val skeleton" id="stat-active">000</span>
           <span class="lbl">Active Cases</span>
         </div>
         <div class="stat-pill">
-          <span class="val" id="stat-suspects">0</span>
+          <span class="val skeleton" id="stat-suspects">000</span>
           <span class="lbl">Suspects</span>
         </div>
         <div class="stat-pill">
-          <span class="val" id="stat-solved">0%</span>
+          <span class="val skeleton" id="stat-solved">00%</span>
           <span class="lbl">Solve Rate</span>
         </div>
       </div>
 
       <div class="topbar-right">
         <button class="btn btn-sm btn-primary" id="demo-btn" style="border-color:var(--accent-orange); color:var(--accent-orange); background:rgba(255,179,0,0.1)">▶ Run Bengaluru Cyber Fraud Demo</button>
+        <button class="alert-btn" id="theme-toggle-btn" title="Toggle Theme" style="font-size: 16px;">🌙</button>
         <div class="role-indicator">
           Role: <span id="active-role-badge">Guest</span>
         </div>
@@ -151,26 +153,35 @@
         <aside id="map-sidebar">
           <div class="sidebar-section">
             <h4>🔍 Tactical Filters</h4>
-            <select class="filter-select" id="filter-district">
-              <option value="all">All Districts</option>
-            </select>
-            <select class="filter-select" id="filter-type">
-              <option value="all">All Crime Types</option>
-            </select>
-            <select class="filter-select" id="filter-severity">
-              <option value="all">All Severity</option>
-              <option value="Critical">Critical Priority</option>
-              <option value="High">High Priority</option>
-              <option value="Medium">Medium Priority</option>
-              <option value="Low">Low Priority</option>
-            </select>
-            <select class="filter-select" id="filter-year">
-              <option value="all">All Years</option>
-              <option value="2025">2025</option>
-              <option value="2024">2024</option>
-              <option value="2023">2023</option>
-              <option value="2022">2022</option>
-            </select>
+            <div class="filter-group" style="margin-bottom: 10px;">
+              <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 4px;">Districts (Multi-select)</label>
+              <div id="district-checkboxes" class="scroll-list-sm" style="max-height: 100px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; display: flex; flex-direction: column; gap: 4px;">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+            <div class="filter-group" style="margin-bottom: 10px;">
+              <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 4px;">Crime Type</label>
+              <select class="filter-select" id="filter-type" style="margin-bottom: 0;">
+                <option value="all">All Crime Types</option>
+              </select>
+            </div>
+            <div class="filter-group" style="margin-bottom: 10px;">
+              <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 4px;">Min Severity: <span id="severity-slider-val" style="color: var(--accent-blue); font-weight: bold;">Low</span></label>
+              <input type="range" id="filter-severity-slider" min="1" max="4" value="1" step="1" style="width:100%; cursor: pointer;">
+              <div style="display:flex; justify-content:space-between; font-size:9px; color:var(--text-muted); margin-top:2px;">
+                <span>Low</span>
+                <span>Med</span>
+                <span>High</span>
+                <span>Crit</span>
+              </div>
+            </div>
+            <div class="filter-group" style="margin-bottom: 10px;">
+              <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 4px;">Date Range</label>
+              <div style="display:flex; gap:6px;">
+                <input type="date" class="filter-input" id="filter-start-date" style="flex:1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 6px; border-radius: 4px; font-size: 11px; outline: none; font-family: var(--font-main);">
+                <input type="date" class="filter-input" id="filter-end-date" style="flex:1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 6px; border-radius: 4px; font-size: 11px; outline: none; font-family: var(--font-main);">
+              </div>
+            </div>
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button class="btn" id="toggle-heatmap" style="flex:1;font-size:11px;">🌡️ Heatmap</button>
               <button class="btn" id="toggle-cluster" style="flex:1;font-size:11px;">📍 Cluster</button>
@@ -469,10 +480,10 @@
       <div class="panel" id="panel-analytics">
         <div class="section-title">Strategic Performance Indicators</div>
         <div class="analytics-grid" id="kpi-grid">
-          <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-val" id="kpi-total">—</div><div class="kpi-label">Total FIRs Filed</div><div class="kpi-trend up" id="kpi-total-trend">—</div></div>
-          <div class="kpi-card"><div class="kpi-icon">✅</div><div class="kpi-val" id="kpi-solved">—</div><div class="kpi-label">Cases Resolved</div><div class="kpi-trend down" id="kpi-solved-trend">—</div></div>
-          <div class="kpi-card"><div class="kpi-icon">🔴</div><div class="kpi-val" id="kpi-high">—</div><div class="kpi-label">High Priority Cases</div><div class="kpi-trend up" id="kpi-high-trend">—</div></div>
-          <div class="kpi-card"><div class="kpi-icon">👤</div><div class="kpi-val" id="kpi-suspects">—</div><div class="kpi-label">Persons of Interest</div><div class="kpi-trend up" id="kpi-sus-trend">—</div></div>
+          <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-val skeleton" id="kpi-total">000</div><div class="kpi-label">Total FIRs Filed</div><div class="kpi-trend up skeleton" id="kpi-total-trend">0000</div></div>
+          <div class="kpi-card"><div class="kpi-icon">✅</div><div class="kpi-val skeleton" id="kpi-solved">000</div><div class="kpi-label">Cases Resolved</div><div class="kpi-trend down skeleton" id="kpi-solved-trend">0000</div></div>
+          <div class="kpi-card"><div class="kpi-icon">🔴</div><div class="kpi-val skeleton" id="kpi-high">000</div><div class="kpi-label">High Priority Cases</div><div class="kpi-trend up skeleton" id="kpi-high-trend">0000</div></div>
+          <div class="kpi-card"><div class="kpi-icon">👤</div><div class="kpi-val skeleton" id="kpi-suspects">000</div><div class="kpi-label">Persons of Interest</div><div class="kpi-trend up skeleton" id="kpi-sus-trend">0000</div></div>
         </div>
 
         <div class="analytics-grid-2">
@@ -628,6 +639,17 @@
       </div>
       <div class="audit-body" id="audit-logs-container">
         <!-- Automatically filled activity logs -->
+      </div>
+    </aside>
+
+    <!-- REAL-TIME ALERTS SIDEBAR -->
+    <aside id="alerts-sidebar">
+      <div class="audit-header" style="border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; color: #fff; font-weight: 700; text-transform: uppercase; font-size: 14px;">
+        <span>🔔 Real-time Alerts Panel</span>
+        <button id="alerts-close-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px;">✕</button>
+      </div>
+      <div class="audit-body" id="alerts-sidebar-container" style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto;">
+        <!-- Filled with critical/high severity incident alerts -->
       </div>
     </aside>
 

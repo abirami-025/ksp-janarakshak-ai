@@ -22,9 +22,182 @@
    let hoverNode = null, dragNode = null;
    let graphWidth, graphHeight;
    let isPhysicsRunning = true;
+   let isAccusedHighlighted = false;
    
    // Chart.js Instances
    const charts = {};
+   
+    // ==========================================
+    // THEME MANAGEMENT (Dark/Light Switcher)
+    // ==========================================
+    let mapTileLayer = null;
+    function updateMapTiles(isLight) {
+      if (!map) return;
+      if (mapTileLayer) map.removeLayer(mapTileLayer);
+      
+      const url = isLight 
+        ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+        
+      mapTileLayer = L.tileLayer(url, { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+    }
+
+    function initThemeToggle() {
+      const themeBtn = document.getElementById('theme-toggle-btn');
+      if (!themeBtn) return;
+      
+      const currentTheme = localStorage.getItem('theme') || 'dark';
+      if (currentTheme === 'light') {
+        document.body.classList.add('light-theme');
+        themeBtn.innerText = '☀️';
+      } else {
+        document.body.classList.remove('light-theme');
+        themeBtn.innerText = '🌙';
+      }
+      
+      themeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('light-theme');
+        const isLight = document.body.classList.contains('light-theme');
+        themeBtn.innerText = isLight ? '☀️' : '🌙';
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        logSystemActivity(`Theme toggled to: ${isLight ? 'Light' : 'Dark'} Mode`);
+        updateMapTiles(isLight);
+      });
+    }
+
+    // ==========================================
+    // REAL-TIME ALERTS PANEL
+    // ==========================================
+    function initAlertsSidebar() {
+      const alertBtn = document.getElementById('alert-btn');
+      const alertsSidebar = document.getElementById('alerts-sidebar');
+      const alertsCloseBtn = document.getElementById('alerts-close-btn');
+
+      if (alertBtn && alertsSidebar && alertsCloseBtn) {
+        alertBtn.onclick = (e) => {
+          e.stopPropagation();
+          alertsSidebar.classList.toggle('open');
+          logSystemActivity("Toggled real-time alerts sidebar drawer");
+        };
+
+        alertsCloseBtn.onclick = () => {
+          alertsSidebar.classList.remove('open');
+        };
+        
+        document.addEventListener('click', (e) => {
+          if (!alertsSidebar.contains(e.target) && !alertBtn.contains(e.target)) {
+            alertsSidebar.classList.remove('open');
+          }
+        });
+      }
+      
+      renderAlertsSidebar();
+    }
+
+    function renderAlertsSidebar() {
+      const container = document.getElementById('alerts-sidebar-container');
+      if (!container) return;
+
+      const highIncidents = db.firs
+        .filter(f => f.severity === 'Critical' || f.severity === 'High')
+        .sort((a,b) => new Date(b.incident_date) - new Date(a.incident_date));
+
+      container.innerHTML = highIncidents.map(f => {
+        const dateStr = new Date(f.incident_date).toLocaleString();
+        const color = f.severity === 'Critical' ? 'var(--accent-red)' : 'var(--accent-orange)';
+        const bg = f.severity === 'Critical' ? 'rgba(255, 56, 96, 0.08)' : 'rgba(255, 179, 0, 0.08)';
+        return `
+          <div class="case-item" onclick="openDossier('${f.fir_id}')" style="background: ${bg}; border-left: 3px solid ${color}; padding: 12px; margin-bottom: 4px; position: relative;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: ${color}; font-weight: 700; margin-bottom: 4px;">${f.fir_id} · ${f.severity.toUpperCase()}</div>
+            <div style="font-size: 12px; color: #fff; font-weight: 600;">${f.incident_type}</div>
+            <div style="font-size: 10px; color: var(--text-muted); margin-top: 3px;">Station: ${f.police_station} | ${f.district}</div>
+            <div style="font-size: 9px; color: var(--text-muted); margin-top: 5px; text-align: right;">${dateStr}</div>
+          </div>
+        `;
+      }).join('');
+      
+      const badge = document.getElementById('alert-count');
+      if (badge) badge.innerText = highIncidents.length;
+      const ewBadge = document.getElementById('early-warning-badge');
+      if (ewBadge) ewBadge.innerText = highIncidents.length;
+    }
+
+    function startAlertSimulation() {
+      const types = ["Cyber Fraud", "Cybercrime", "Property Theft", "NDPS Smuggling", "Traffic Violation"];
+      const districts = ["Bengaluru Urban", "Mysuru", "Mangaluru", "Hubballi-Dharwad", "Belagavi"];
+      const stations = ["Indiranagar PS", "Vidyaranyapuram PS", "Kadri PS", "Gokul Road PS", "Khade Bazar PS"];
+      
+      setInterval(() => {
+        if (!db) return;
+        const randomType = types[Math.floor(Math.random() * types.length)];
+        const randomDist = districts[Math.floor(Math.random() * districts.length)];
+        const randomStation = stations[Math.floor(Math.random() * stations.length)];
+        const randomSev = Math.random() > 0.4 ? 'High' : 'Critical';
+        const randomId = `FIR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+        
+        const mockFir = {
+          fir_id: randomId,
+          incident_type: randomType,
+          crime_category: 'White Collar',
+          severity: randomSev,
+          police_station: randomStation,
+          district: randomDist,
+          ipc_sections: "Sec 420, 66D IT Act",
+          incident_date: new Date().toISOString(),
+          incident_time_category: 'Night',
+          incident_hour: new Date().getHours(),
+          latitude: 15.3173 + (Math.random() - 0.5) * 2,
+          longitude: 75.7139 + (Math.random() - 0.5) * 2,
+          status: 'Under Investigation',
+          description: `Simulated real-time alert: ${randomType} reported at ${randomStation}, ${randomDist}. Patrol unit dispatched.`,
+          loss_amount_inr: Math.floor(50000 + Math.random() * 500000),
+          recovered_amount_inr: 0,
+          season: 'Post-Monsoon',
+          investigation_timeline: [
+            { date: new Date().toISOString(), stage: 'First Information Report Registered', officer: 'ASI Kumar' }
+          ]
+        };
+        
+        db.firs.unshift(mockFir);
+        
+        const alertCountEl = document.getElementById('alert-count');
+        if (alertCountEl) {
+          const alertCount = parseInt(alertCountEl.innerText) + 1;
+          alertCountEl.innerText = alertCount;
+          alertCountEl.style.animation = 'pulse 1s 3';
+        }
+        
+        const bell = document.getElementById('alert-btn');
+        if (bell) {
+          bell.style.boxShadow = randomSev === 'Critical' ? '0 0 15px var(--accent-red)' : '0 0 15px var(--accent-orange)';
+          setTimeout(() => { bell.style.boxShadow = ''; }, 2000);
+        }
+        
+        const container = document.getElementById('alerts-sidebar-container');
+        if (container) {
+          const div = document.createElement('div');
+          div.className = 'case-item';
+          div.style.animation = 'fadeIn 0.5s ease both';
+          const color = randomSev === 'Critical' ? 'var(--accent-red)' : 'var(--accent-orange)';
+          const bg = randomSev === 'Critical' ? 'rgba(255, 56, 96, 0.08)' : 'rgba(255, 179, 0, 0.08)';
+          div.style.background = bg;
+          div.style.borderLeft = `3px solid ${color}`;
+          div.style.padding = '12px';
+          div.style.marginBottom = '4px';
+          div.onclick = () => openDossier(randomId);
+          
+          div.innerHTML = `
+            <div style="font-family: var(--font-mono); font-size: 11px; color: ${color}; font-weight: 700; margin-bottom: 4px;">🛡️ NEW ALERT · ${randomId} · ${randomSev.toUpperCase()}</div>
+            <div style="font-size: 12px; color: #fff; font-weight: 600;">${randomType}</div>
+            <div style="font-size: 10px; color: var(--text-muted); margin-top: 3px;">Station: ${randomStation} | ${randomDist}</div>
+            <div style="font-size: 9px; color: var(--text-muted); margin-top: 5px; text-align: right;">Just Now</div>
+          `;
+          container.prepend(div);
+        }
+        
+        logSystemActivity(`[REAL-TIME ALERT] ${randomSev} priority ${randomType} incident: ${randomId}`);
+      }, 45000);
+    }
    
    // ==========================================
    // 1. BOOTSTRAP & DATA LOADING
@@ -32,6 +205,13 @@
    document.addEventListener('DOMContentLoaded', async () => {
      document.getElementById('footer-time').innerText = new Date().toLocaleString();
    
+      const initialTheme = localStorage.getItem('theme') || 'dark';
+      if (initialTheme === 'light') {
+        document.body.classList.add('light-theme');
+      } else {
+        document.body.classList.remove('light-theme');
+      }
+
      // Setup Catalyst SDK (Simulated check)
      if (typeof catalyst !== 'undefined') {
        catalyst.initApp({ project_id: 'janarakshak_ksp_2026', environment: 'Production' });
@@ -40,13 +220,33 @@
    
      try {
        const res = await fetch('crime-data.json');
+       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
        db = await res.json();
        console.log("Database Loaded:", db);
+       logSystemActivity("Database connected and verified.", "System");
+       
+       // Remove skeletons
+       document.querySelectorAll('.skeleton').forEach(el => el.classList.remove('skeleton'));
+       
+       // Data Population
+       document.getElementById('stat-firs').innerText = db.firs.length;
+       document.getElementById('stat-active').innerText = db.firs.filter(f => f.status.includes('Active')).length;
+       document.getElementById('stat-suspects').innerText = db.suspects.length;
+       const solved = db.firs.filter(f => f.status.includes('Solved')).length;
+       document.getElementById('stat-solved').innerText = Math.round((solved / db.firs.length) * 100) + '%';
+     } catch (e) {
+       console.error("Critical Error Loading DB:", e);
+       logSystemActivity("CRITICAL: Failed to load core database. Showing fallback data.", "System");
+       db = { firs: [], suspects: [], transactions: [], links: [], victims: [], mapped_locations: [] };
+       // Remove skeletons on fail too
+       document.querySelectorAll('.skeleton').forEach(el => el.classList.remove('skeleton'));
+     }
        
        initRoleLogin();
        setupTabs();
        
        // Pre-initialize components
+       initThemeToggle();
        initMap();
        initChat();
        initGraph();
@@ -57,11 +257,8 @@
        initAuditPanel();
        initAlertDropdown();
        generateEarlyWarnings();
-       
-     } catch (e) {
-       console.error("Failed to load crime database:", e);
-       alert("Error loading crime-data.json. Please generate data first.");
-     }
+       initAlertsSidebar();
+       startAlertSimulation();
    });
    
    // ==========================================
@@ -92,6 +289,18 @@
      document.getElementById('audit-close-btn').addEventListener('click', () => {
        document.getElementById('audit-sidebar').classList.remove('open');
      });
+
+     // Logout handler
+     const logoutBtn = document.getElementById('logout-btn');
+     if (logoutBtn) {
+       logoutBtn.addEventListener('click', () => {
+         currentRole = "Guest";
+         currentUserBadge = "";
+         document.getElementById('active-role-badge').innerText = "Guest";
+         document.getElementById('login-overlay').classList.remove('hidden');
+         logAudit(`Logged out. Session terminated.`);
+       });
+     }
 
      // Demo Mode
      const demoBtn = document.getElementById('demo-btn');
@@ -202,6 +411,13 @@
       
       logSystemActivity(`Authenticated session established. Role: ${role}`);
     }
+
+     let isAnalyticsInitialized = false;
+     function initAnalyticsLazy() {
+       if (isAnalyticsInitialized) return;
+       initAnalytics();
+       isAnalyticsInitialized = true;
+     }
     
     function setupTabs() {
       const tabs = document.querySelectorAll('.tab-btn');
@@ -217,7 +433,16 @@
           document.getElementById(activeTab).classList.add('active');
     
           if (activeTab === 'panel-map') map.invalidateSize();
-          if (activeTab === 'panel-graph') isPhysicsRunning = true; else isPhysicsRunning = false;
+          
+          if (activeTab === 'panel-graph') {
+            wakeGraphPhysics();
+          } else {
+            stopGraphAnimation();
+          }
+
+          if (activeTab === 'panel-analytics') {
+            initAnalyticsLazy();
+          }
           
           logSystemActivity(`Navigated to tab: ${tab.innerText.replace(/[^\w\s]/g, '').trim()}`);
         });
@@ -306,58 +531,128 @@
    // ==========================================
    // 5. MAP & GEOSPATIAL
    // ==========================================
-   function initMap() {
-     map = L.map('crime-map', { zoomControl: false, attributionControl: false }).setView([15.3173, 75.7139], 7);
-   
-     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-       subdomains: 'abcd', maxZoom: 19
-     }).addTo(map);
-   
-     markerCluster = L.markerClusterGroup({
-       iconCreateFunction: function (cluster) {
-         const count = cluster.getChildCount();
-         let size = count < 10 ? 30 : count < 30 ? 40 : 50;
-         let color = count < 10 ? 'rgba(0,180,255,0.7)' : count < 30 ? 'rgba(255,179,0,0.7)' : 'rgba(255,56,96,0.7)';
-         return L.divIcon({
-           html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;border:2px solid rgba(255,255,255,0.3);box-shadow:0 0 10px ${color}">${count}</div>`,
-           className: 'custom-cluster', iconSize: L.point(size, size)
-         });
-       }
-     });
-   
-     // Filters setup
-     const dists = [...new Set(db.firs.map(f => f.district))].sort();
-     const types = [...new Set(db.firs.map(f => f.incident_type))].sort();
-     
-     dists.forEach(d => document.getElementById('filter-district').add(new Option(d, d)));
-     types.forEach(t => document.getElementById('filter-type').add(new Option(t, t)));
-   
-     document.querySelectorAll('.filter-select').forEach(el => {
-       el.addEventListener('change', () => {
-         logAudit(`Map filter updated: ${el.value}`);
-         renderMapData();
-       });
-     });
-   
-     document.getElementById('toggle-heatmap').onclick = () => { isHeatmap = true; renderMapData(); };
-     document.getElementById('toggle-cluster').onclick = () => { isHeatmap = false; renderMapData(); };
-   
-     renderMapData();
-   }
-   
-   function renderMapData() {
-     const fd = document.getElementById('filter-district').value;
-     const ft = document.getElementById('filter-type').value;
-     const fs = document.getElementById('filter-severity').value;
-     const fy = document.getElementById('filter-year').value;
-   
-     const filtered = db.firs.filter(f => {
-       if (fd !== 'all' && f.district !== fd) return false;
-       if (ft !== 'all' && f.incident_type !== ft) return false;
-       if (fs !== 'all' && f.severity !== fs) return false;
-       if (fy !== 'all' && !f.incident_date.startsWith(fy)) return false;
-       return true;
-     });
+   function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+    const debouncedRenderMapData = debounce(renderMapData, 250);
+
+    function initMap() {
+      map = L.map('crime-map', { zoomControl: false, attributionControl: false }).setView([15.3173, 75.7139], 7);
+    
+      const isLight = document.body.classList.contains('light-theme');
+      updateMapTiles(isLight);
+    
+      markerCluster = L.markerClusterGroup({
+        iconCreateFunction: function (cluster) {
+          const count = cluster.getChildCount();
+          let size = count < 10 ? 30 : count < 30 ? 40 : 50;
+          let color = count < 10 ? 'rgba(0,180,255,0.7)' : count < 30 ? 'rgba(255,179,0,0.7)' : 'rgba(255,56,96,0.7)';
+          return L.divIcon({
+            html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;border:2px solid rgba(255,255,255,0.3);box-shadow:0 0 10px ${color}">${count}</div>`,
+            className: 'custom-cluster', iconSize: L.point(size, size)
+          });
+        }
+      });
+    
+      // Filters setup
+      const dists = [...new Set(db.firs.map(f => f.district))].sort();
+      const types = [...new Set(db.firs.map(f => f.incident_type))].sort();
+      
+      const districtContainer = document.getElementById('district-checkboxes');
+      if (districtContainer) {
+        districtContainer.innerHTML = dists.map((d, idx) => `
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; cursor: pointer; color: #fff;">
+            <input type="checkbox" class="filter-district-chk" value="${d}" checked style="cursor: pointer; width: auto; margin: 0;">
+            ${d}
+          </label>
+        `).join('');
+      }
+
+      types.forEach(t => document.getElementById('filter-type').add(new Option(t, t)));
+    
+      // Wire listeners
+      document.querySelectorAll('.filter-district-chk').forEach(chk => {
+        chk.addEventListener('change', () => {
+          logAudit(`District filters updated`);
+          debouncedRenderMapData();
+        });
+      });
+
+      document.getElementById('filter-type').addEventListener('change', () => {
+        logAudit(`Crime Type filter updated: ${document.getElementById('filter-type').value}`);
+        debouncedRenderMapData();
+      });
+
+      const sevSlider = document.getElementById('filter-severity-slider');
+      const sevSliderVal = document.getElementById('severity-slider-val');
+      const severityLevels = ["Low", "Medium", "High", "Critical"];
+      if (sevSlider && sevSliderVal) {
+        sevSlider.addEventListener('input', () => {
+          const val = severityLevels[sevSlider.value - 1];
+          sevSliderVal.innerText = val;
+          if (val === 'Critical') sevSliderVal.style.color = 'var(--accent-red)';
+          else if (val === 'High') sevSliderVal.style.color = 'var(--accent-orange)';
+          else if (val === 'Medium') sevSliderVal.style.color = 'var(--accent-green)';
+          else sevSliderVal.style.color = 'var(--accent-blue)';
+          
+          logAudit(`Severity filter updated to Min: ${val}`);
+          debouncedRenderMapData();
+        });
+      }
+
+      document.getElementById('filter-start-date').addEventListener('change', () => {
+        logAudit(`Start date filter updated: ${document.getElementById('filter-start-date').value}`);
+        debouncedRenderMapData();
+      });
+      document.getElementById('filter-end-date').addEventListener('change', () => {
+        logAudit(`End date filter updated: ${document.getElementById('filter-end-date').value}`);
+        debouncedRenderMapData();
+      });
+    
+      document.getElementById('toggle-heatmap').onclick = () => { isHeatmap = true; renderMapData(); };
+      document.getElementById('toggle-cluster').onclick = () => { isHeatmap = false; renderMapData(); };
+    
+      renderMapData();
+    }
+    
+    function renderMapData() {
+      // 1. Get multiple selected districts
+      const checkedDistricts = Array.from(document.querySelectorAll('.filter-district-chk:checked')).map(chk => chk.value);
+      
+      // 2. Get other filter values
+      const ft = document.getElementById('filter-type').value;
+      
+      const sevSlider = document.getElementById('filter-severity-slider');
+      const minSevVal = sevSlider ? parseInt(sevSlider.value) : 1;
+      const severityMap = { 'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4 };
+      
+      const startDateVal = document.getElementById('filter-start-date').value;
+      const endDateVal = document.getElementById('filter-end-date').value;
+      const startDate = startDateVal ? new Date(startDateVal) : null;
+      const endDate = endDateVal ? new Date(endDateVal) : null;
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+
+      const filtered = db.firs.filter(f => {
+        if (checkedDistricts.length > 0 && !checkedDistricts.includes(f.district)) return false;
+        if (ft !== 'all' && f.incident_type !== ft) return false;
+        
+        const fSevScore = severityMap[f.severity] || 1;
+        if (fSevScore < minSevVal) return false;
+        
+        const fDate = new Date(f.incident_date);
+        if (startDate && fDate < startDate) return false;
+        if (endDate && fDate > endDate) return false;
+        
+        return true;
+      });
    
      if (heatLayer) map.removeLayer(heatLayer);
      markerCluster.clearLayers();
@@ -636,20 +931,31 @@
      if (q.includes("cyber") || q.includes("fraud") || q.includes("ಸೈಬರ್")) {
        const cyberFirs = db.firs.filter(f => f.incident_type === 'Cybercrime');
        const topSuspect = db.suspects.find(s => s.primary_mo === "Cybercrime");
-       summary = `Detected organized cyber fraud ring primarily operating in ${cyberFirs[0].district}. The prevailing MO involves "${cyberFirs[0].modus_operandi}". Cross-referencing financial data reveals high-velocity layering through shell accounts.`;
-       related = `Linked Suspects: ${topSuspect ? `[${topSuspect.suspect_id}]` : 'None'}<br>Linked Cases: [${cyberFirs[0].fir_id}], [${cyberFirs[1].fir_id}]`;
+       const fir0 = cyberFirs[0] || { district: 'Bengaluru', modus_operandi: 'Phishing', fir_id: 'FIR-2026-0001' };
+       const fir1 = cyberFirs[1] || { fir_id: 'FIR-2026-0002' };
+       summary = `Detected organized cyber fraud ring primarily operating in ${fir0.district}. The prevailing MO involves "${fir0.modus_operandi}". Cross-referencing financial data reveals high-velocity layering through shell accounts.`;
+       related = `Linked Suspects: ${topSuspect ? `[${topSuspect.suspect_id}]` : 'None'}<br>Linked Cases: [${fir0.fir_id}], [${fir1.fir_id}]`;
        action = "Deploy digital forensics team. Issue immediate freeze order on linked bank accounts. Alert cyber cell in neighboring districts.";
        confidence = 94;
-       sources = [cyberFirs[0].fir_id, cyberFirs[1].fir_id, topSuspect ? topSuspect.suspect_id : ''].filter(Boolean);
+       sources = [fir0.fir_id, fir1.fir_id, topSuspect ? topSuspect.suspect_id : ''].filter(Boolean);
        reasoningText = `Filtered FIRs by incident_type=Cybercrime → identified top suspect ${topSuspect ? topSuspect.name : 'Unknown'} via MO alignment → retrieved transaction records for cyber scams.`;
      } else if (q.includes("suspect") || q.includes("accused") || q.includes("offender")) {
        const repeat = db.suspects.filter(s => s.prior_arrests >= 3);
-       summary = `There are ${repeat.length} high-risk repeat offenders currently tracked. The most critical is ${repeat[0].name} with ${repeat[0].prior_arrests} prior arrests.`;
-       related = `Primary MO: ${repeat[0].primary_mo}. Gang Affiliation: ${repeat[0].gang_affiliation || 'Loner'}.`;
-       action = `Elevate surveillance level for [${repeat[0].suspect_id}]. Cross-check recent associates and financial inflows.`;
-       confidence = 88;
-       sources = [repeat[0].suspect_id];
-       reasoningText = `Scanned suspect index for risk_score & prior_arrests >= 3 → identified ${repeat[0].name} as recidivist target.`;
+       if (repeat.length > 0) {
+         summary = `There are ${repeat.length} high-risk repeat offenders currently tracked. The most critical is ${repeat[0].name} with ${repeat[0].prior_arrests} prior arrests.`;
+         related = `Primary MO: ${repeat[0].primary_mo}. Gang Affiliation: ${repeat[0].gang_affiliation || 'Loner'}.`;
+         action = `Elevate surveillance level for [${repeat[0].suspect_id}]. Cross-check recent associates and financial inflows.`;
+         confidence = 88;
+         sources = [repeat[0].suspect_id];
+         reasoningText = `Scanned suspect index for risk_score & prior_arrests >= 3 → identified ${repeat[0].name} as recidivist target.`;
+       } else {
+         summary = `No repeat offenders with 3 or more prior arrests found in the database.`;
+         related = `No recidivists tracked under current query criteria.`;
+         action = `Continue standard surveillance and update offender registry.`;
+         confidence = 70;
+         sources = [];
+         reasoningText = `Scanned suspect index for prior_arrests >= 3 → 0 results found.`;
+       }
      } else if (q.includes("predict") || q.includes("risk")) {
        summary = `Predictive models indicate a 15% elevated risk for Property crimes in urban zones during the upcoming festival season.`;
        related = `Vulnerable Zones: Bengaluru Urban, Mysuru.`;
@@ -699,10 +1005,39 @@
    }
    
    // Export Chat History as a real PDF using client-side jsPDF
-   function exportChatToPDF() {
-     logSystemActivity("Exported chat history transcript as PDF.");
-     const { jsPDF } = window.jspdf;
-     const doc = new jsPDF();
+    function exportChatToPDF() {
+      logSystemActivity("Exported chat history transcript as PDF.");
+      
+      if (!window.jspdf) {
+        console.warn("jsPDF CDN not loaded. Falling back to browser print.");
+        const printWin = window.open('', '_blank');
+        printWin.document.write(`
+          <html><head><title>KSP Chat Transcript</title>
+          <style>
+            body { font-family: monospace; padding: 40px; }
+            h2 { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            .msg { margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 10px; }
+            .user { color: #0056b3; font-weight: bold; }
+            .bot { color: #333; }
+          </style></head><body>
+          <h2>KSP Janarakshak AI - Investigation Transcript</h2>
+          <div style="margin-bottom:20px;font-size:12px;color:#555;">Generated: ${new Date().toLocaleString()} | Officer: ${currentUserBadge || "KSP-2026-9847"} | Role: ${currentRole}</div>
+          ${chatHistory.map(m => `
+            <div class="msg ${m.role}">
+              <strong>${m.role === 'user' ? 'OFFICER' : 'AI AGENT'}:</strong><br>
+              ${m.content.replace(/<[^>]*>/g, "")}
+            </div>
+          `).join('')}
+          </body></html>
+        `);
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => { printWin.print(); printWin.close(); }, 500);
+        return;
+      }
+      
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
      
      doc.setFont("courier", "bold");
      doc.setFontSize(16);
@@ -813,11 +1148,12 @@
        const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
        dragNode = nodes.find(n => Math.hypot(n.x - mx, n.y - my) < n.radius + 6);
        if (dragNode) {
+         wakeGraphPhysics();
          let nodeLinks = links.filter(l => l.source === dragNode.id || l.target === dragNode.id);
          let riskScore = 0; let syndicateMsg = '';
          let linkExpl = nodeLinks.slice(0,3).map(l => { let oid = l.source === dragNode.id ? l.target : l.source; let o = nodes.find(n => n.id === oid); return '<div style="margin-bottom:4px">Linked to <strong>'+(o?o.type:'Unknown')+'</strong> ('+(o?o.label:'?')+') via '+l.label+'</div>'; }).join('');
-         if (dragNode.type === 'Suspect') { const sus = db.suspects.find(s => s.suspect_id === dragNode.id); riskScore = sus ? Math.round(sus.risk_score * 100) : 50; if (nodeLinks.length > 3) syndicateMsg = '<div style="color:var(--accent-red);margin-top:4px">?? High Centrality: Potential Syndicate Hub</div>'; }
-         else if (dragNode.type === 'FIR') { riskScore = nodeLinks.length * 15; if (nodeLinks.length > 4) syndicateMsg = '<div style="color:var(--accent-orange);margin-top:4px">?? Organized Crime Nexus Detected</div>'; }
+         if (dragNode.type === 'Suspect') { const sus = db.suspects.find(s => s.suspect_id === dragNode.id); riskScore = sus ? Math.round(sus.risk_score * 100) : 50; if (nodeLinks.length > 3) syndicateMsg = '<div style="color:var(--accent-red);margin-top:4px">🚨 High Centrality: Potential Syndicate Hub</div>'; }
+         else if (dragNode.type === 'FIR') { riskScore = nodeLinks.length * 15; if (nodeLinks.length > 4) syndicateMsg = '<div style="color:var(--accent-orange);margin-top:4px">⚠️ Organized Crime Nexus Detected</div>'; }
          else { riskScore = nodeLinks.length * 10; }
          document.getElementById('node-detail').innerHTML = '<div style="font-size:14px;color:#fff;font-weight:bold;margin-bottom:4px">'+dragNode.name+'</div><div style="margin-bottom:8px"><span style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">'+dragNode.type+'</span></div><div style="color:#b0c4d8;margin-bottom:10px">'+dragNode.details+'</div><div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px"><strong>Network Risk Score:</strong> <span style="color:'+(riskScore>70?'var(--accent-red)':'var(--accent-green)')+'">'+Math.min(99,riskScore)+'/100</span>'+syndicateMsg+'</div><div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px"><strong>Relationship AI Explanation:</strong><div style="margin-top:4px;font-size:10px;color:#a8b2c1">'+(linkExpl||'No direct structural links visualized.')+'</div></div><div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,0.4)">Sources: ['+dragNode.id+']</div>';
        }
@@ -825,7 +1161,7 @@
      canvas.addEventListener('mousemove', (e) => {
        const rect = canvas.getBoundingClientRect();
        const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
-       if (dragNode) { dragNode.x = mx; dragNode.y = my; dragNode.vx = 0; dragNode.vy = 0; }
+       if (dragNode) { dragNode.x = mx; dragNode.y = my; dragNode.vx = 0; dragNode.vy = 0; wakeGraphPhysics(); }
        else {
          hoverNode = nodes.find(n => Math.hypot(n.x - mx, n.y - my) < n.radius + 6);
          const tt = document.getElementById('graph-tooltip');
@@ -836,11 +1172,44 @@
          } else tt.style.display = 'none';
        }
      });
-     canvas.addEventListener('mouseup', () => dragNode = null);
+     canvas.addEventListener('mouseup', () => { dragNode = null; wakeGraphPhysics(); });
      
-     document.getElementById('graph-reset').onclick = () => { nodes.forEach(n => { n.vx = 0; n.vy = 0; }); };
+     document.getElementById('graph-reset').onclick = () => {
+       logSystemActivity("Reset force graph physics velocities.");
+       nodes.forEach(n => { n.vx = 0; n.vy = 0; });
+       wakeGraphPhysics();
+     };
      
-     requestAnimationFrame(animateGraph);
+     document.getElementById('graph-focus-suspects').onclick = () => {
+       isAccusedHighlighted = !isAccusedHighlighted;
+       const btn = document.getElementById('graph-focus-suspects');
+       if (isAccusedHighlighted) {
+         btn.innerText = "🟢 Accused Highlighted";
+         btn.style.borderColor = "var(--accent-red)";
+         logSystemActivity("Activated accused highlight overlay on force graph.");
+       } else {
+         btn.innerText = "🔴 Highlight Accused";
+         btn.style.borderColor = "";
+         logSystemActivity("Deactivated accused highlight overlay.");
+       }
+       wakeGraphPhysics();
+     };
+     
+     document.getElementById('graph-expand-all').onclick = () => {
+       logSystemActivity("Executed network expansion shockwave simulation.");
+       nodes.forEach(n => {
+         let dx = n.x - graphWidth/2;
+         let dy = n.y - graphHeight/2;
+         let dist = Math.hypot(dx, dy) || 1;
+         n.x += (dx/dist) * 150;
+         n.y += (dy/dist) * 150;
+         n.vx = (dx/dist) * 20;
+         n.vy = (dy/dist) * 20;
+       });
+       wakeGraphPhysics();
+     };
+     
+     startGraphAnimation();
    }
    
    function resizeCanvas() {
@@ -890,30 +1259,90 @@
      });
    }
    
-   function animateGraph() {
-     if (activeTab === 'panel-graph' && isPhysicsRunning && ctx) {
+   let graphAnimationId = null;
+   let totalKineticEnergy = 100;
+   
+   function wakeGraphPhysics() {
+     isPhysicsRunning = true;
+     totalKineticEnergy = 100;
+     if (!graphAnimationId && activeTab === 'panel-graph') {
+       graphAnimationId = requestAnimationFrame(animateGraphLoop);
+     }
+   }
+   
+   function startGraphAnimation() {
+     wakeGraphPhysics();
+   }
+   
+   function stopGraphAnimation() {
+     isPhysicsRunning = false;
+     if (graphAnimationId) {
+       cancelAnimationFrame(graphAnimationId);
+       graphAnimationId = null;
+     }
+   }
+   
+   function drawGraphFrame() {
+     if (!ctx) return;
+     ctx.clearRect(0,0,graphWidth,graphHeight);
+     
+     // Draw Links
+     links.forEach(l => {
+       let n1 = nodes.find(n => n.id === l.source), n2 = nodes.find(n => n.id === l.target);
+       if (!n1 || !n2) return;
+       ctx.strokeStyle = (hoverNode && (hoverNode===n1||hoverNode===n2)) ? 'rgba(0,180,255,0.6)' : 'rgba(255,255,255,0.1)';
+       ctx.lineWidth = 1;
+       ctx.beginPath(); ctx.moveTo(n1.x, n1.y); ctx.lineTo(n2.x, n2.y); ctx.stroke();
+     });
+     
+     // Draw Nodes
+     nodes.forEach(n => {
+       ctx.fillStyle = n.color;
+       let r = n.radius;
+       if (isAccusedHighlighted && n.type === 'Suspect') {
+         ctx.strokeStyle = 'rgba(255, 56, 96, 0.4)';
+         ctx.lineWidth = 6 + Math.sin(Date.now() / 150) * 3;
+         ctx.beginPath(); ctx.arc(n.x, n.y, r + 4, 0, Math.PI*2); ctx.stroke();
+       }
+       ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2); ctx.fill();
+       if (hoverNode === n || dragNode === n) {
+         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+       }
+     });
+   }
+   
+   function animateGraphLoop() {
+     if (activeTab !== 'panel-graph') {
+       graphAnimationId = null;
+       return;
+     }
+     
+     if (isPhysicsRunning && ctx) {
        updatePhysics();
-       ctx.clearRect(0,0,graphWidth,graphHeight);
        
-       // Draw Links
-       links.forEach(l => {
-         let n1 = nodes.find(n => n.id === l.source), n2 = nodes.find(n => n.id === l.target);
-         if (!n1 || !n2) return;
-         ctx.strokeStyle = (hoverNode && (hoverNode===n1||hoverNode===n2)) ? 'rgba(0,180,255,0.6)' : 'rgba(255,255,255,0.1)';
-         ctx.lineWidth = 1;
-         ctx.beginPath(); ctx.moveTo(n1.x, n1.y); ctx.lineTo(n2.x, n2.y); ctx.stroke();
-       });
-       
-       // Draw Nodes
+       let energy = 0;
        nodes.forEach(n => {
-         ctx.fillStyle = n.color;
-         ctx.beginPath(); ctx.arc(n.x, n.y, n.radius, 0, Math.PI*2); ctx.fill();
-         if (hoverNode === n || dragNode === n) {
-           ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+         if (n !== dragNode) {
+           energy += n.vx * n.vx + n.vy * n.vy;
          }
        });
+       totalKineticEnergy = energy;
+       
+       if (totalKineticEnergy < 0.05 && !dragNode) {
+         isPhysicsRunning = false;
+         logSystemActivity("Force graph settled. Putting physics engine to sleep.");
+       }
+       
+       drawGraphFrame();
+     } else if (dragNode) {
+       drawGraphFrame();
      }
-     requestAnimationFrame(animateGraph);
+     
+     if (isPhysicsRunning || dragNode) {
+       graphAnimationId = requestAnimationFrame(animateGraphLoop);
+     } else {
+       graphAnimationId = null;
+     }
    }
 
    // ==========================================
@@ -933,10 +1362,43 @@
      }
      renderList(offenders);
      
-     document.getElementById('offender-search-input').addEventListener('input', (e) => {
-       const val = e.target.value.toLowerCase();
-       renderList(offenders.filter(s => s.name.toLowerCase().includes(val) || s.primary_mo.toLowerCase().includes(val)));
-     });
+     function applyOffenderFilters() {
+        const query = document.getElementById('offender-search-input').value.toLowerCase();
+        const risk = document.getElementById('filter-offender-risk').value;
+        const status = document.getElementById('filter-offender-status').value;
+        
+        let filtered = offenders;
+        
+        if (query) {
+          filtered = filtered.filter(s => s.name.toLowerCase().includes(query) || s.primary_mo.toLowerCase().includes(query));
+        }
+        
+        if (risk !== 'all') {
+          if (risk === 'high') {
+            filtered = filtered.filter(s => s.risk_score > 0.7);
+          } else if (risk === 'medium') {
+            filtered = filtered.filter(s => s.risk_score >= 0.4 && s.risk_score <= 0.7);
+          } else if (risk === 'low') {
+            filtered = filtered.filter(s => s.risk_score < 0.4);
+          }
+        }
+        
+        if (status !== 'all') {
+          if (status === 'at-large') {
+            filtered = filtered.filter(s => s.status.toLowerCase().includes('at large') || s.status.toLowerCase().includes('absconding') || s.status.toLowerCase().includes('active'));
+          } else if (status === 'custody') {
+            filtered = filtered.filter(s => s.status.toLowerCase().includes('custody') || s.status.toLowerCase().includes('arrested'));
+          } else if (status === 'bail') {
+            filtered = filtered.filter(s => s.status.toLowerCase().includes('bail') || s.status.toLowerCase().includes('released'));
+          }
+        }
+        
+        renderList(filtered);
+      }
+      
+      document.getElementById('offender-search-input').addEventListener('input', applyOffenderFilters);
+      document.getElementById('filter-offender-risk').addEventListener('change', applyOffenderFilters);
+      document.getElementById('filter-offender-status').addEventListener('change', applyOffenderFilters);
    }
    
    function selectOffender(id) {
@@ -1040,6 +1502,59 @@
          <div class="ai-reason">⚠️ ${t.risk_flag}</div>
        </div>
      `).join('');
+
+     document.getElementById('btn-freeze-account').onclick = () => {
+       if (!selectedTxnId) return;
+       const freezeStep = document.getElementById('wf-step-freeze');
+       if (freezeStep) freezeStep.classList.add('completed');
+       logAudit(`DISPATCHED SECURE BANK FREEZE ORDER for transaction linked to alert ${selectedTxnId}`);
+       logSystemActivity(`Bank Freeze Order dispatched for TXN ${selectedTxnId}.`);
+       alert(`🚨 SecOps Action Logged:\nFreeze dispatch sent to sending institution for transaction ${selectedTxnId}. Audit token: CATALYST-FREEZE-${Date.now()}`);
+     };
+
+     document.getElementById('btn-trace-leads').onclick = () => {
+       if (!selectedTxnId) return;
+       const t = db.transactions.find(x => x.transaction_id === selectedTxnId);
+       if (!t) return;
+       
+       document.getElementById('tab-graph').click();
+       isAccusedHighlighted = true;
+       const btn = document.getElementById('graph-focus-suspects');
+       if (btn) {
+         btn.innerText = "🟢 Accused Highlighted";
+         btn.style.borderColor = "var(--accent-red)";
+       }
+       
+       const node = nodes.find(n => n.id === t.suspect_id);
+       if (node) {
+         hoverNode = node;
+         dragNode = node;
+         
+         let nodeLinks = links.filter(l => l.source === node.id || l.target === node.id);
+         let riskScore = Math.round((db.suspects.find(s => s.suspect_id === node.id)?.risk_score || 0.5) * 100);
+         let syndicateMsg = nodeLinks.length > 3 ? '<div style="color:var(--accent-red);margin-top:4px">🚨 High Centrality: Potential Syndicate Hub</div>' : '';
+         let linkExpl = nodeLinks.slice(0,3).map(l => { 
+           let oid = l.source === node.id ? l.target : l.source; 
+           let o = nodes.find(n => n.id === oid); 
+           return `<div style="margin-bottom:4px">Linked to <strong>${o?o.type:'Unknown'}</strong> (${o?o.label:'?'}) via ${l.label}</div>`; 
+         }).join('');
+         
+         document.getElementById('node-detail').innerHTML = `
+           <div style="font-size:14px;color:#fff;font-weight:bold;margin-bottom:4px">${node.name}</div>
+           <div style="margin-bottom:8px"><span style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">${node.type}</span></div>
+           <div style="color:#b0c4d8;margin-bottom:10px">${node.details}</div>
+           <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px"><strong>Network Risk Score:</strong> <span style="color:${riskScore>70?'var(--accent-red)':'var(--accent-green)'}">${riskScore}/100</span>${syndicateMsg}</div>
+           <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px"><strong>Relationship AI Explanation:</strong><div style="margin-top:4px;font-size:10px;color:#a8b2c1">${linkExpl||'No direct structural links visualized.'}</div></div>
+           <div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,0.4)">Sources: [${node.id}]</div>
+         `;
+         
+         node.x = graphWidth / 2;
+         node.y = graphHeight / 2;
+         node.vx = 0; node.vy = 0;
+         
+         setTimeout(() => { dragNode = null; }, 1000);
+       }
+     };
    }
    
    function selectTransaction(id) {
@@ -1073,13 +1588,32 @@
    // 10. ANALYTICS & SOCIO-DEMOGRAPHIC CHARTS
    // ==========================================
    function initAnalytics() {
-     const getCounts = (key) => { const c = {}; db.firs.forEach(f => c[f[key]] = (c[f[key]]||0)+1); return c; };
-     
-     Chart.defaults.color = '#7a8fa6';
-     Chart.defaults.font.family = 'Inter';
+      // Populate KPI Cards
+      const totalFirs = db.firs.length;
+      const solvedFirs = db.firs.filter(f => f.status.includes('Solved')).length;
+      const highFirs = db.firs.filter(f => f.severity === 'Critical' || f.severity === 'High').length;
+      const totalSuspects = db.suspects.length;
+      
+      document.getElementById('kpi-total').innerText = totalFirs;
+      document.getElementById('kpi-total-trend').innerText = `+12.4% MoM`;
+      
+      document.getElementById('kpi-solved').innerText = solvedFirs;
+      document.getElementById('kpi-solved-trend').innerText = `+3.1% velocity`;
+      
+      document.getElementById('kpi-high').innerText = highFirs;
+      document.getElementById('kpi-high-trend').innerText = `+2.8% surge`;
+      
+      document.getElementById('kpi-suspects').innerText = totalSuspects;
+      document.getElementById('kpi-sus-trend').innerText = `+4 tracked`;
+
+      const getCounts = (key) => { const c = {}; db.firs.forEach(f => c[f[key]] = (c[f[key]]||0)+1); return c; };
+      
+      Chart.defaults.color = '#7a8fa6';
+      Chart.defaults.font.family = 'Inter';
 
      // Chart 1: Crime Types
      const tc = getCounts('incident_type');
+     if (charts.type) charts.type.destroy();
      charts.type = new Chart(document.getElementById('chart-crime-type'), {
        type: 'doughnut', data: { labels: Object.keys(tc), datasets: [{ data: Object.values(tc), backgroundColor: ['#00b4ff','#ff3860','#ffb300','#00e676','#a855f7'], borderWidth: 0 }] },
        options: { plugins: { legend: { position: 'right' } } }
@@ -1087,6 +1621,7 @@
 
      // Chart 2: Monthly Trends
      const mCounts = Array(12).fill(0); db.firs.forEach(f => mCounts[new Date(f.incident_date).getMonth()]++);
+     if (charts.monthly) charts.monthly.destroy();
      charts.monthly = new Chart(document.getElementById('chart-monthly'), {
        type: 'line', data: { labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], datasets: [{ label: 'Cases', data: mCounts, borderColor: '#00ffe7', backgroundColor: 'rgba(0,255,231,0.1)', fill: true, tension: 0.3 }] },
        options: { scales: { x:{grid:{color:'rgba(255,255,255,0.05)'}}, y:{grid:{color:'rgba(255,255,255,0.05)'}} } }
@@ -1094,6 +1629,7 @@
 
      // Chart 3: Districts Bar
      const dCounts = Object.entries(getCounts('district')).sort((a,b)=>b[1]-a[1]).slice(0,5);
+     if (charts.dist) charts.dist.destroy();
      charts.dist = new Chart(document.getElementById('chart-districts'), {
        type: 'bar', data: { labels: dCounts.map(d=>d[0].split(' ')[0]), datasets: [{ data: dCounts.map(d=>d[1]), backgroundColor: '#00b4ff' }] },
        options: { plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(255,255,255,0.05)'}}} }
@@ -1101,6 +1637,7 @@
 
      // Chart 4: Severity Polar
      const sc = getCounts('severity');
+     if (charts.sev) charts.sev.destroy();
      charts.sev = new Chart(document.getElementById('chart-severity'), {
        type: 'polarArea', data: { labels: Object.keys(sc), datasets: [{ data: Object.values(sc), backgroundColor: ['rgba(255,56,96,0.7)','rgba(255,179,0,0.7)','rgba(0,230,118,0.7)','rgba(0,180,255,0.7)'], borderWidth: 0 }] },
        options: { scales:{r:{grid:{color:'rgba(255,255,255,0.1)'}}} }
@@ -1108,6 +1645,7 @@
      
      // Chart 5: Hour
      const hCounts = Array(24).fill(0); db.firs.forEach(f => hCounts[f.incident_hour]++);
+     if (charts.hr) charts.hr.destroy();
      charts.hr = new Chart(document.getElementById('chart-hour'), {
        type: 'bar', data: { labels: Array(24).fill(0).map((_,i)=>`${i}:00`), datasets: [{ data: hCounts, backgroundColor: '#ffb300' }] },
        options: { plugins:{legend:{display:false}} }
@@ -1115,6 +1653,7 @@
 
      // Chart 6: QuickML Prediction Radar
      const dPred = ["Bengaluru Urban", "Mysuru", "Mangaluru", "Hubballi-Dharwad"];
+     if (charts.pred) charts.pred.destroy();
      charts.pred = new Chart(document.getElementById('chart-prediction'), {
        type: 'radar', data: { labels: dPred.map(d=>d.split(' ')[0]), datasets: [{ label: 'Risk Score', data: [85, 62, 55, 48], borderColor: '#ff3860', backgroundColor: 'rgba(255,56,96,0.2)' }] },
        options: { scales:{r:{grid:{color:'rgba(255,255,255,0.1)'}, angleLines:{color:'rgba(255,255,255,0.1)'}}} }
@@ -1123,12 +1662,14 @@
      // Chart 7: Victim Age Demographics
      const aCounts = {"<25":0, "26-40":0, "41-60":0, ">60":0};
      db.victims.forEach(v => { if(v.age<25)aCounts["<25"]++; else if(v.age<=40)aCounts["26-40"]++; else if(v.age<=60)aCounts["41-60"]++; else aCounts[">60"]++; });
+     if (charts.age) charts.age.destroy();
      charts.age = new Chart(document.getElementById('chart-demographics'), {
        type: 'bar', data: { labels: Object.keys(aCounts), datasets: [{ data: Object.values(aCounts), backgroundColor: '#00e676' }] }
      });
 
      // Chart 8: Victim Education (Socio-Demographic)
      const eduCounts = {}; db.victims.forEach(v => eduCounts[v.education] = (eduCounts[v.education]||0)+1);
+     if (charts.edu) charts.edu.destroy();
      charts.edu = new Chart(document.getElementById('chart-education'), {
        type: 'pie', data: { labels: Object.keys(eduCounts), datasets: [{ data: Object.values(eduCounts), backgroundColor: ['#00b4ff','#ff3860','#ffb300','#00e676','#a855f7','#4dd0e1','#f06292'], borderWidth: 1, borderColor:'#000' }] },
        options: { plugins: { legend: { position: 'right' } } }
@@ -1137,6 +1678,7 @@
      // Chart 9: Occupation
      const occCounts = {}; db.victims.forEach(v => occCounts[v.occupation] = (occCounts[v.occupation]||0)+1);
      const topOcc = Object.entries(occCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+     if (charts.occ) charts.occ.destroy();
      charts.occ = new Chart(document.getElementById('chart-occupation'), {
        type: 'bar', data: { labels: topOcc.map(o=>o[0]), datasets: [{ data: topOcc.map(o=>o[1]), backgroundColor: '#a855f7' }] },
        options: { indexAxis: 'y', plugins:{legend:{display:false}} }
@@ -1244,7 +1786,7 @@
              const s = db.suspects.find(x=>x.suspect_id===l.entity_id);
              return `<div style="background:rgba(255,56,96,0.1); border:1px solid rgba(255,56,96,0.3); padding:8px; border-radius:4px; margin-bottom:6px;">
                <strong style="color:var(--accent-red)">${s?.name || l.entity_id}</strong> (${l.association_type})<br>
-               <span style="font-size:10px; color:#c0d0e0">Risk: ${(s?.risk_score*100).toFixed(0)}% | Status: ${s?.status}</span>
+               <span style="font-size:10px; color:#c0d0e0">Risk: ${s ? (s.risk_score*100).toFixed(0) : 'N/A'}% | Status: ${s?.status || 'Unknown'}</span>
              </div>`;
            }).join('') || '<div style="font-size:11px; color:#777">No suspects linked yet.</div>'}
          </div>
@@ -1280,97 +1822,138 @@
    // ------------------------------------------
    // PDF EXPORT (SmartBrowz Simulation)
    // ------------------------------------------
-   document.getElementById('dossier-print').onclick = () => {
-     const firId = document.querySelector('#dossier-body .df-val')?.innerText;
-     if (!firId) return;
-     const fir = db.firs.find(f => f.fir_id === firId);
-     if (!fir) return;
+    document.getElementById('dossier-print').onclick = () => {
+      const firId = document.querySelector('#dossier-body .df-val')?.innerText;
+      if (!firId) return;
+      const fir = db.firs.find(f => f.fir_id === firId);
+      if (!fir) return;
+ 
+      logAudit(`Exported Case Dossier as PDF via jsPDF for ${firId}`);
+      logSystemActivity(`Exported case dossier PDF: ${firId}`);
 
-     logAudit(`Exported Case Dossier as PDF via SmartBrowz for ${firId}`);
+      const sLinks = db.links.filter(l => l.fir_id === firId && l.entity_type === 'Suspect');
+      const txns = db.transactions.filter(t => t.fir_id === firId);
+      const confidence = Math.min(98, 70 + (sLinks.length * 8) + (txns.length * 5));
 
-     const sLinks = db.links.filter(l => l.fir_id === firId && l.entity_type === 'Suspect');
-     const txns = db.transactions.filter(t => t.fir_id === firId);
-     const confidence = Math.min(98, 70 + (sLinks.length * 8) + (txns.length * 5));
+      if (!window.jspdf) {
+        alert("jsPDF library not loaded.");
+        return;
+      }
 
-     const printWin = window.open('', '_blank');
-     printWin.document.write(`
-       <html>
-       <head>
-         <title>Case Dossier - ${firId}</title>
-         <style>
-           body { font-family: 'Courier New', Courier, monospace; color: #111; padding: 40px; line-height: 1.4; }
-           .header { text-align: center; border-bottom: 3px double #111; padding-bottom: 15px; margin-bottom: 20px; }
-           .title { font-size: 24px; font-weight: bold; text-transform: uppercase; }
-           .subtitle { font-size: 14px; margin-top: 5px; color: #555; }
-           .section { margin-top: 25px; border-bottom: 1px solid #333; padding-bottom: 8px; font-size: 16px; font-weight: bold; text-transform: uppercase; }
-           .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
-           .field { font-size: 12px; }
-           .label { font-weight: bold; text-transform: uppercase; color: #444; }
-           .value { margin-top: 3px; font-size: 13px; }
-           .ai-brief { background: #f4f4f4; border-left: 5px solid #111; padding: 15px; margin-top: 20px; font-size: 12px; }
-           .timeline { margin-top: 15px; }
-           .timeline-item { margin-bottom: 12px; border-left: 2px solid #555; padding-left: 10px; font-size: 12px; }
-           .timeline-date { font-weight: bold; }
-         </style>
-       </head>
-       <body>
-         <div class="header">
-           <div class="title">Karnataka State Police Intelligence Suite</div>
-           <div class="subtitle">CONFIDENTIAL INVESTIGATION DOSSIER · GENERATED VIA JANARAKSHAK AI</div>
-           <div style="font-size:10px; margin-top:5px;">TIMESTAMP: ${new Date().toLocaleString()} · ASSIGNED OFFICER BADGE: ${currentUserBadge}</div>
-         </div>
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      
+      // Page setup & styling
+      doc.setFont("courier", "bold");
+      doc.setFontSize(16);
+      doc.text("KARNATAKA STATE POLICE INTELLIGENCE SUITE", 14, 18);
+      
+      doc.setFontSize(10);
+      doc.text("CONFIDENTIAL INVESTIGATION DOSSIER · GENERATED VIA JANARAKSHAK AI", 14, 24);
+      
+      doc.setFontSize(8);
+      doc.setFont("courier", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text(`TIMESTAMP: ${new Date().toLocaleString()} · OFFICER BADGE: ${currentUserBadge || "KSP-2026-9847"}`, 14, 29);
+      doc.line(14, 32, 196, 32);
+      
+      let y = 40;
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      
+      // Main Metadata
+      doc.setFont("courier", "bold");
+      doc.text("CASE METADATA", 14, y);
+      y += 6;
+      doc.setFont("courier", "normal");
+      doc.text(`FIR Number:        ${fir.fir_id}`, 14, y); y += 5;
+      doc.text(`Incident Category: ${fir.incident_type}`, 14, y); y += 5;
+      doc.text(`Station & Dist:    ${fir.police_station}, ${fir.district}`, 14, y); y += 5;
+      doc.text(`IPC Sections:      ${fir.ipc_sections}`, 14, y); y += 5;
+      doc.text(`Incident Date:     ${new Date(fir.incident_date).toLocaleString()}`, 14, y); y += 5;
+      doc.text(`Status:            ${fir.status}`, 14, y); y += 8;
+      
+      // Narrative Section
+      doc.setFont("courier", "bold");
+      doc.text("INCIDENT NARRATIVE", 14, y);
+      y += 6;
+      doc.setFont("courier", "normal");
+      const descLines = doc.splitTextToSize(fir.description, 180);
+      descLines.forEach(line => {
+        if (y > 270) { doc.addPage(); y = 20; }
+        doc.text(line, 14, y);
+        y += 5;
+      });
+      y += 5;
+      
+      // AI Brief Section
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.setFont("courier", "bold");
+      doc.text("AI INVESTIGATOR DECISION BRIEFING", 14, y);
+      y += 6;
+      doc.setFont("courier", "normal");
+      const summaryText = `Case ${fir.fir_id} matches ${fir.incident_type} crime topology. AI clustering has structurally linked ${sLinks.length} suspect(s) and ${txns.length} financial transaction(s). Syndicate activity probability is computed at ${confidence}%.`;
+      const aiLines = doc.splitTextToSize(summaryText, 180);
+      aiLines.forEach(line => {
+        if (y > 270) { doc.addPage(); y = 20; }
+        doc.text(line, 14, y);
+        y += 5;
+      });
+      y += 3;
+      doc.text("Recommended Next Steps:", 14, y); y += 5;
+      doc.text("1. Dispatch immediate summons/warrant queries for mapped suspects.", 14, y); y += 5;
+      doc.text("2. Flag and freeze all linked money-mule accounts to prevent Hawala outflow.", 14, y); y += 5;
+      doc.text("3. Coordinate evidence sharing across the station network.", 14, y); y += 8;
 
-         <div class="grid">
-           <div class="field"><div class="label">FIR Number</div><div class="value">${fir.fir_id}</div></div>
-           <div class="field"><div class="label">Incident Category</div><div class="value">${fir.incident_type}</div></div>
-           <div class="field"><div class="label">Station & District</div><div class="value">${fir.police_station}, ${fir.district}</div></div>
-           <div class="field"><div class="label">IPC Sections</div><div class="value">${fir.ipc_sections}</div></div>
-         </div>
+      // Linked Suspects Section
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.setFont("courier", "bold");
+      doc.text("LINKED SUSPECTS", 14, y);
+      y += 6;
+      doc.setFont("courier", "normal");
+      if (sLinks.length === 0) {
+        doc.text("No suspect entities linked to this case record.", 14, y);
+        y += 5;
+      } else {
+        sLinks.forEach(l => {
+          if (y > 270) { doc.addPage(); y = 20; }
+          const s = db.suspects.find(x => x.suspect_id === l.entity_id);
+          const nameStr = currentRole === 'Policymaker' ? '[REDACTED PII]' : (s?.name || l.entity_id);
+          const riskStr = s ? `${Math.round(s.risk_score * 100)}%` : 'N/A';
+          doc.text(`- ${nameStr} (${l.association_type}) | Risk: ${riskStr} | Status: ${s?.status || 'Unknown'}`, 14, y);
+          y += 5;
+        });
+      }
+      y += 5;
 
-         <div class="section">Incident Narrative</div>
-         <div style="font-size: 12px; margin-top: 10px; text-align: justify;">${fir.description}</div>
+      // Timeline Section
+      if (y > 240) { doc.addPage(); y = 20; }
+      doc.setFont("courier", "bold");
+      doc.text("CHRONOLOGICAL INVESTIGATION HISTORY", 14, y);
+      y += 6;
+      doc.setFont("courier", "normal");
+      fir.investigation_timeline.forEach(t => {
+        if (y > 265) { doc.addPage(); y = 20; }
+        doc.setFont("courier", "bold");
+        doc.text(`${new Date(t.date).toLocaleDateString()} · Stage: ${t.stage}`, 14, y);
+        y += 5;
+        doc.setFont("courier", "normal");
+        doc.text(`Assigned Officer: ${t.officer}`, 14, y);
+        y += 6;
+      });
 
-         <div class="section">AI Investigator Decision Briefing</div>
-         <div class="ai-brief">
-           <strong>Executive Summary:</strong><br>
-           Case ${fir.fir_id} matches ${fir.incident_type} crime topology. AI clustering has structurally linked ${sLinks.length} suspect(s) and ${txns.length} financial transaction(s). Syndicate activity probability is computed at ${confidence}%.<br><br>
-           <strong>Recommended Next Steps:</strong><br>
-           1. Dispatch immediate summons/warrant queries for mapped suspects.<br>
-           2. Flag and freeze all linked money-mule accounts to prevent Hawala/layering outflow.<br>
-           3. Coordinate evidence sharing across the ${fir.police_station} station network.<br><br>
-           <strong>Citations & Evidence Sources:</strong><br>
-           Based on: [${fir.fir_id}]${sLinks.length > 0 ? ', [' + sLinks.map(l => l.entity_id).join('], [') + ']' : ''}
-         </div>
+      // Secure Footer on all pages
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont("courier", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`SECURE AUDIT RECORD: CATALYST-SMARTBROWZ-SESSION-LOGGED | Page ${i} of ${pageCount}`, 14, 287);
+      }
 
-         <div class="section">Linked Suspects</div>
-         <div style="margin-top: 10px; font-size: 12px;">
-           ${sLinks.map(l => {
-             const s = db.suspects.find(x => x.suspect_id === l.entity_id);
-             return `- ${s?.name || l.entity_id} (${l.association_type}) | Risk Score: ${(s?.risk_score*100).toFixed(0)}% | Status: ${s?.status || 'Unknown'}`;
-           }).join('<br>') || 'No suspect entities linked to this case record.'}
-         </div>
-
-         <div class="section">Chronological Investigation History</div>
-         <div class="timeline">
-           ${fir.investigation_timeline.map(t => `
-             <div class="timeline-item">
-               <div class="timeline-date">${new Date(t.date).toLocaleDateString()}</div>
-               <div>Stage: ${t.stage}</div>
-               <div>Assigned: ${t.officer}</div>
-             </div>
-           `).join('')}
-         </div>
-
-         <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #555; border-top: 1px solid #ccc; padding-top: 10px;">
-           SECURE AUDIT RECORD: CATALYST-SMARTBROWZ-SESSION-LOGGED
-         </div>
-       </body>
-       </html>
-     `);
-     printWin.document.close();
-     printWin.focus();
-     setTimeout(() => { printWin.print(); printWin.close(); }, 500);
-   };
+      doc.save(`KSP_Case_Dossier_${firId}_${Date.now()}.pdf`);
+    };
 
    // ==========================================
    // 12. CASE INSIGHTS PANEL — Investigator Decision Support
@@ -1465,32 +2048,38 @@
    }
 
    function findSimilarCases(fir) {
-     const similar = db.firs.filter(f => {
-       if (f.fir_id === fir.fir_id) return false;
-       let score = 0;
-       if (f.incident_type === fir.incident_type) score += 3;
-       if (f.crime_category === fir.crime_category) score += 2;
-       if (f.district === fir.district) score += 1;
-       if (f.ipc_sections === fir.ipc_sections) score += 2;
-       if (f.severity === fir.severity) score += 1;
-       f._simScore = score;
-       return score >= 4;
-     }).sort((a, b) => b._simScore - a._simScore).slice(0, 5);
+     const similar = db.firs
+       .filter(f => f.fir_id !== fir.fir_id)
+       .map(f => {
+         let score = 0;
+         if (f.incident_type === fir.incident_type) score += 3;
+         if (f.crime_category === fir.crime_category) score += 2;
+         if (f.district === fir.district) score += 1;
+         if (f.ipc_sections === fir.ipc_sections) score += 2;
+         if (f.severity === fir.severity) score += 1;
+         return { caseObj: f, simScore: score };
+       })
+       .filter(item => item.simScore >= 4)
+       .sort((a, b) => b.simScore - a.simScore)
+       .slice(0, 5);
 
      if (similar.length === 0) {
        return `<div style="color: var(--text-muted); font-size: 12px; font-style: italic; padding: 10px 0;">No structurally similar cases found in current database.</div>`;
      }
 
-     return similar.map(f => `
-       <div style="background: rgba(0,180,255,0.05); border: 1px solid rgba(0,180,255,0.2); border-radius: 6px; padding: 10px; cursor: pointer; transition: border-color 0.2s;" onmouseover="this.style.borderColor='rgba(0,180,255,0.5)'" onmouseout="this.style.borderColor='rgba(0,180,255,0.2)'" onclick="openDossier('${f.fir_id}')">
-         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-           <span style="font-family: var(--font-mono); color: var(--accent-cyan); font-size: 11px;">${f.fir_id}</span>
-           <span style="font-size: 10px; background: rgba(0,180,255,0.15); padding: 2px 6px; border-radius: 10px; color: var(--accent-blue);">Similarity: ${Math.min(100, f._simScore * 12)}%</span>
+     return similar.map(item => {
+       const f = item.caseObj;
+       return `
+         <div style="background: rgba(0,180,255,0.05); border: 1px solid rgba(0,180,255,0.2); border-radius: 6px; padding: 10px; cursor: pointer; transition: border-color 0.2s;" onmouseover="this.style.borderColor='rgba(0,180,255,0.5)'" onmouseout="this.style.borderColor='rgba(0,180,255,0.2)'" onclick="openDossier('${f.fir_id}')">
+           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+             <span style="font-family: var(--font-mono); color: var(--accent-cyan); font-size: 11px;">${f.fir_id}</span>
+             <span style="font-size: 10px; background: rgba(0,180,255,0.15); padding: 2px 6px; border-radius: 10px; color: var(--accent-blue);">Similarity: ${Math.min(100, item.simScore * 12)}%</span>
+           </div>
+           <div style="font-size: 12px; color: #e8f0fe; font-weight: 600;">${f.incident_type}</div>
+           <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${f.police_station}, ${f.district} · ${f.status}</div>
          </div>
-         <div style="font-size: 12px; color: #e8f0fe; font-weight: 600;">${f.incident_type}</div>
-         <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${f.police_station}, ${f.district} · ${f.status}</div>
-       </div>
-     `).join('');
+       `;
+     }).join('');
    }
 
    function generateInvestigativeLeads(fir) {

@@ -1,0 +1,4 @@
+[requestfailed] https://cdn.zohostatic.com/catalyst/sdk/js/2.0.0/catalystWebSDK.js - net::ERR_NAME_NOT_RESOLVED
+[error] Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+[log] Database Loaded: [object Object]
+[pageerror] Uncaught Error: Canvas is already in use. Chart with ID '0' must be destroyed before the canvas with ID 'chart-crime-type' can be reused.

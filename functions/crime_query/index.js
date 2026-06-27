@@ -39,8 +39,10 @@ module.exports = (context, basicIO) => {
                        cyber.slice(0, 3).map(f => `• <strong>${f.fir_id}</strong> - ${f.police_station} (${f.severity}) - ₹${f.loss_amount_inr.toLocaleString()}`).join('<br>');
       } else if (qLower.includes("ಬೆಂಗಳೂರು") || qLower.includes("bengaluru")) {
         const blr = db.firs.filter(f => f.district.includes('Bengaluru'));
-        responseText = `ಬೆಂಗಳೂರಿನಲ್ಲಿ ಒಟ್ಟು <strong>${blr.length} ಪ್ರಕರಣಗಳು</strong> ದಾಖಲಾಗಿವೆ.<br><br>` +
-                       `ಇತ್ತೀಚಿನ ಪ್ರಕರಣ: <strong>${blr[0].fir_id}</strong> (${blr[0].incident_type}) - ${blr[0].police_station}.`;
+        const latestCaseStr = blr.length > 0 
+          ? `ಇತ್ತೀಚಿನ ಪ್ರಕರಣ: <strong>${blr[0].fir_id}</strong> (${blr[0].incident_type}) - ${blr[0].police_station}.` 
+          : "ಯಾವುದೇ ಪ್ರಕರಣಗಳು ಕಂಡುಬಂದಿಲ್ಲ.";
+        responseText = `ಬೆಂಗಳೂರಿನಲ್ಲಿ ಒಟ್ಟು <strong>${blr.length} ಪ್ರಕರಣಗಳು</strong> ದಾಖಲಾಗಿವೆ.<br><br>` + latestCaseStr;
       } else {
         responseText = `ನಮಸ್ಕಾರ! ನಿಮ್ಮ ಪ್ರಶ್ನೆ: "${query}" ನಮಗೆ ತಲುಪಿದೆ. ಹೆಚ್ಚಿನ ವಿವರಗಳಿಗೆ "ಸೈಬರ್" ಅಥವಾ "ಬೆಂಗಳೂರು" ಬಳಸಿ.`;
       }

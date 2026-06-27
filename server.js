@@ -20,10 +20,11 @@ const server = http.createServer((req, res) => {
     
     // Normalize URL path
     let filePath = req.url === '/' ? '/index.html' : req.url;
-    filePath = path.join(__dirname, filePath);
+    const clientDir = path.join(__dirname, 'client');
+    filePath = path.join(clientDir, filePath);
     
-    // Safety check: ensure file is within the directory
-    if (!filePath.startsWith(__dirname)) {
+    // Safety check: ensure file is within the client directory
+    if (!filePath.startsWith(clientDir)) {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
         res.end('Forbidden');
         return;
